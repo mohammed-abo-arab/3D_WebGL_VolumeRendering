@@ -1,0 +1,287 @@
+.wrapper,
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Loading-Section */
+#loading {
+  position: fixed;
+  display: block;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  text-align: center;
+  opacity: 0.7;
+  background-color: #fff;
+  z-index: 99;
+}
+
+#loading-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100;
+}
+
+/* BODY-Section */
+#row3 {
+  background-color: #444;
+  flex: 2;
+  display: flex;
+}
+
+/* SLIDER-BAR-BODY-Section */
+#col1 {
+  background-color: #333;
+  flex: 0 0 25%;
+  padding: 10px;
+  color: #eee;
+}
+
+/* Sidebar */
+#sidebar {
+  position: fixed;
+  width: 25%;
+  background: #333;
+  color: #fff;
+  transition: all 0.4s;
+  height: 100%;
+  padding: 5px;
+}
+
+.section_header_2 {
+  background-color: #222;
+  margin-top: 50px;
+  margin-bottom: 10px;
+  padding: 10px;
+  font-size: 18px;
+  color: #fff;
+}
+.section_header_2 p {
+  margin-top: 10;
+}
+
+/* Style inputs */
+input[type="checkbox"],
+button {
+  width: 25%;
+  margin: 5px 0;
+}
+/* Style inputs */
+input[type="file"],
+input[type="range"],
+button {
+  width: 100%;
+  margin: 5px 0;
+}
+
+/* Volume Rendering features */
+#VOL_OPTIONS,
+#SUR_OPTIONS {
+  background-color: #222;
+  padding: 10px;
+  display: none;
+}
+
+.container p,
+#set_iso_Color p {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+/* 3D rendered SLICER viewer */
+#rendered_SLICER {
+  background-color: #222;
+  padding: 10px;
+  border-radius: 2px;
+}
+
+.planePositionX,
+.planePositionY,
+.planePositionZ {
+  width: 100%;
+}
+
+/* CANVAS-BAR-BODY-Section */
+#col2 {
+  background-color: #363636;
+  flex: 1;
+}
+
+/* Navbar adjustments */
+.navbar .container-fluid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Sidebar collapse button */
+#sidebarCollapse {
+  font-size: medium;
+  margin-left: -8px;
+  background-color: transparent;
+  border-color: transparent;
+}
+
+#sidebarCollapse .fa {
+  margin-right: 50px;
+  font-size: medium;
+  color: greenyellow;
+}
+
+/* Reset and REC labels */
+.navbar label {
+  margin-left: 400px;
+  color: forestgreen;
+  font-weight: bold;
+}
+
+/* Button generic styles */
+.navbar button {
+  background-color: transparent;
+  border-color: transparent;
+}
+/* #Reset_Background .fa{
+  margin-right: 100px;
+} */
+
+/* Icons in buttons */
+.navbar button .fa {
+  font-size: medium;
+  color: greenyellow;
+}
+
+#viewContainer {
+  height: 82vh;
+  padding: 20px;
+}
+
+.fa {
+  color: #9acd32;
+}
+
+.overlay {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+#sidebar.active {
+  margin-left: -25%;
+}
+
+.dropdown-toggle::after {
+  top: 50%;
+  right: 20%;
+  transform: translateY(-50%);
+}
+
+/* DROPDOWN MENU NAVBAR */
+.dropbtn {
+  background-color: transparent;
+  color: #ddd;
+}
+
+.dropdown-content {
+  background-color: #f1f1f1;
+  box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+}
+
+.dropdown-content a {
+  color: black;
+  padding: 12px 16px;
+}
+
+.dropdown a:hover {
+  background-color: #ddd;
+}
+
+.show {
+  display: block;
+}
+/* ###### Vol inputs #### */
+.splitDIVclass {
+  max-width: max-content;
+}
+
+.vol_visibility,
+.vol_shade,
+.vol_gradient_opacity,
+.vol_scalar_opacity,
+.vol_distance,
+.vol_blending,
+.vol_color,
+.vol_z_voxel_scale {
+  margin-left: 4px;
+  max-width: max-content;
+}
+
+.vol_gradient_opacity,
+.vol_scalar_opacity {
+  padding: initial;
+}
+
+.vol_distance {
+  padding: initial;
+}
+
+.vol_color {
+  max-width: 55px;
+  padding: revert;
+}
+
+.vol_z_voxel_scale {
+  max-width: 55px;
+  padding: initial;
+  margin-right: 4px;
+}
+
+/* ##### Sur inputs ################ */
+
+.splitsurDIVclass {
+  max-width: none;
+}
+
+.sur_edge_vis,
+.sur_set_opacity,
+.sur_iso_Value,
+.col_sur,
+.sur_set_z_voxel_scale {
+  margin-left: auto;
+  margin-right: auto;
+  max-width: max-content;
+}
+
+.sur_set_opacity,
+.sur_iso_Value {
+  padding: initial;
+}
+
+.col_sur {
+  max-width: 55px;
+  padding: revert;
+}
+
+.sur_set_z_voxel_scale {
+  max-width: 55px;
+  padding: initial;
+  margin-right: 4px;
+}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/control-panel.css' %}" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <!-- templates/control_panel.html -->
+    <div id="control-panel" class="control-panel">
+      <label>
+        <input type="checkbox" class="flag" data-name="pickable" checked />
+        pickable
+      </label>
+      <label>
+        <input type="checkbox" class="flag" data-name="visibility" checked />
+        visibility
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          class="flag"
+          data-name="contextVisibility"
+          checked
+        />
+        contextVisibility
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          class="flag"
+          data-name="handleVisibility"
+          checked
+        />
+        handleVisibility
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          class="flag"
+          data-name="faceHandlesEnabled"
+          checked
+        />
+        faceHandlesEnabled
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          class="flag"
+          data-name="edgeHandlesEnabled"
+          checked
+        />
+        edgeHandlesEnabled
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          class="flag"
+          data-name="cornerHandlesEnabled"
+          checked
+        />
+        cornerHandlesEnabled
+      </label>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    {% load static %}
+    <title>3D Visualizer</title>
+    <link
+      rel="icon"
+      href="{% static 'images/favicon.ico' %}"
+      type="image/x-icon"
+    />
+
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Links -->
+    <link rel="stylesheet" href="{% static '/css/bootstrap.css' %}" />
+    <link
+      rel="stylesheet"
+      href="{% static '/css/final_3D_viewer_CSS_file.css' %}"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+    />
+    <!-- Scripts  .css -->
+    <script
+      type="text/javascript"
+      src="{% static '/js/bootstrap.js' %}"
+    ></script>
+    <script
+      type="text/javascript"
+      src="{% static '/js/jquery-3.6.0.min.js' %}"
+    ></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/itk-wasm@1.0.0-b.48/dist/umd/itk-wasm.min.js"></script>
+    <script src="https://unpkg.com/itk@14.0.1/umd/itk.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <script type="text/javascript" src="{% static '/js/detect.js' %}"></script>
+    <script type="text/javascript" src="{% static '/js/vtk.js' %}"></script>
+    <script
+      type="text/javascript"
+      src="{% static '/js/gl_matrix.js' %}"
+    ></script>
+    <script src="{% static 'js/conversion.js' %}" defer></script>
+    <script src="{% static 'js/final3dWebGL.js' %}" defer></script>
+    <script src="{% static 'js/viz_3D_options.js' %}" defer></script>
+    <!-- <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="{% static 'js/cacheManager.js' %}" defer></script> -->
+  </head>
+  <body>
+    <div class="wrapper">
+      <div id="row3">
+        <nav id="sidebar">
+          <div class="section_header_2">
+            <p>3D Rendering:</p>
+            <input
+              title="Drop-down box contain features for Volume"
+              class="method_selection"
+              type="checkbox"
+              name="Render"
+              id="r1"
+              value="Volume"
+            />
+            <label title="Volume rendering" for="r1">Volume</label>
+          </div>
+
+          <div title="First select Volume..." class="divContainer">
+            <div id="divInput">
+              <form>
+                <label for="btn1"></label>
+                <input
+                  title="First select Volume..."
+                  name="inputFile"
+                  type="file"
+                  multiple
+                  id="btn1"
+                  webkitdirectory="true"
+                  directory
+                />
+              </form>
+              <div class="divButton">
+                <button
+                  title="Before hitting the render button: First select Volume > upload dicom files > press render"
+                  name="render"
+                  id="btn2"
+                >
+                  Render
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="VOL_OPTIONS">
+            <div id="set_opacity_distance_bm_Color" class="container">
+              <p>
+                <b title="Gradient Opacity">Gradient</b>
+                <b title="Scalar Opacity Unit Distance">ScalarUnit</b>
+                <b title="Sample Distance">Sample-Dis</b>
+                <b title="Blending Modes">Blending</b>
+                <b title="Color Transfer Function">Color</b>
+                <b title="Z voxel Dimension Scaling">Z-Scale</b>
+              </p>
+            </div>
+          </div>
+        </nav>
+        <div id="col2">
+          <nav class="navbar navbar-expand-lg">
+            <div class="container-fluid">
+              <button
+                title="SideBar Collapse"
+                type="button"
+                id="sidebarCollapse"
+              >
+                <i class="fa">&#xf0c9;</i>
+              </button>
+              <label>Reset:</label>
+              <button title="Reset Canvas View" id="Reset_canvas">
+                <i class="fa">&#xf021;</i>
+              </button>
+              <label>REC:</label>
+              <button title="Start REC" id="start">
+                <i class="fa">&#xf01d;</i>
+              </button>
+              <button title="Stop REC" id="stop">
+                <i class="fa">&#xf28e;</i>
+              </button>
+              <button
+                title="ScreenShot"
+                type="button"
+                id="shot"
+                onclick="screenShot()"
+              >
+                <i class="fa">&#xf030;</i>
+              </button>
+            </div>
+          </nav>
+          <div id="viewContainer"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      $(document).ready(function () {
+        $("#sidebarCollapse").on("click", function () {
+          $("#sidebar").toggleClass("active");
+          $(".overlay").toggle();
+        });
+
+        $(".overlay").click(function () {
+          $("#sidebar").toggleClass("active");
+          $(".overlay").toggle();
+        });
+
+        $("#r1").change(function () {
+          if ($(this).is(":checked")) {
+            document.getElementById("btn1").disabled = false;
+            document.getElementById("btn2").disabled = false;
+          } else {
+            document.getElementById("btn1").disabled = true;
+            document.getElementById("btn2").disabled = true;
+          }
+          $("#VOL_OPTIONS").slideToggle("slow");
+        });
+      });
+
+      $("#btn2").click(function () {
+        if ($("#r1").is(":checked")) {
+          // Append loading div specifically for volume rendering
+          $(
+            `<div id="loading" style="display: none;"><img id="loading-image" src="{% static 'images/loading.gif' %}" alt="Loading..."></div>`
+          ).appendTo("#VOL_OPTIONS");
+
+          var $this = $(this);
+          if ($this.data("clicked", true)) {
+            vol_loading_message();
+          } else {
+            vol_check_console_log();
+          }
+          $("#loading").show();
+        }
+      });
+
+      /**
+       * Volume rendering
+       */
+
+      vol_arr = [];
+      vol_arr2 = [];
+      volDiv = 0;
+
+      function vol_loading_message() {
+        vol_Picked_color = $(".colors_channels");
+
+        for (var i = 0; i < vol_Picked_color.length; i++) {
+          vol_arr2.push($(vol_Picked_color[i]).val());
+        }
+
+        if (vol_arr.length == vol_arr2.length) {
+          vol_process(vol_arr, vol_arr2);
+        } else {
+          // alert("Please check the number of input vs the number of channels ")
+        }
+      }
+
+      function vol_check_console_log() {
+        vol_check_console_log(console.log());
+      }
+
+      $("#btn1").change(function () {
+        if ($(btn1).val() != "") {
+          $(".method_selection:checked").each(function (i) {
+            var vol_value = $(this).val();
+            // console.log(vol_value);
+
+            newvoldiv = $(
+              '<div class="splitDIVclass" id="splitDiv' + volDiv + '"> </div>'
+            ).appendTo("#set_opacity_distance_bm_Color");
+
+            // Create a row for the first set of controls
+            var firstRow = $('<div class="row first-row"></div>').appendTo(
+              newvoldiv
+            );
+
+            vol_edge_vis = $(
+              '<input title="Visibility" class="vol_set_vis col vol_visibility" type="checkbox" checked id="visibility' +
+                volDiv +
+                '">'
+            ).appendTo(firstRow);
+            vol_shade = $(
+              '<input title="Shade" class="vol_set_shade col vol_shade" type="checkbox" checked id="shade' +
+                volDiv +
+                '">'
+            ).appendTo(firstRow);
+            vol_gradient_opacity = $(
+              '<input title="Gradient Opacity" class="vol_set_gradient_opacity col vol_gradient_opacity" id="setGradientOpacity' +
+                volDiv +
+                '" type="number" min="0" max="1" step="0.1" value="0.6">'
+            ).appendTo(firstRow);
+            vol_scalar_opacity = $(
+              '<input title="Scalar Opacity" class="vol_set_scalar_opacity col vol_scalar_opacity" id="setScalarOpacityUnitDistance' +
+                volDiv +
+                '" type="range" min="0" max="255" step="1" value="127">'
+            ).appendTo(firstRow);
+            vol_distance = $(
+              '<input title="Sample Distance" class="vol_set_distance col vol_distance" id="setSampleDistance' +
+                volDiv +
+                '" type="number" min="0.1" max="1" step="0.1" value="0.75">'
+            ).appendTo(firstRow);
+
+            // Create a row for the second set of controls
+            var secondRow = $('<div class="row second-row"></div>').appendTo(
+              newvoldiv
+            );
+
+            vol_blending = $(
+              '<select title="Blending" class="vol_blending_mode col vol_blending" id="blendMode' +
+                volDiv +
+                '">'
+            ).appendTo(secondRow);
+            vol_blending.append(
+              $("<option>").attr("value", "0").text("Composite")
+            );
+            vol_blending.append(
+              $("<option>").attr("value", "1").text("MaxIntensity")
+            );
+            vol_blending.append(
+              $("<option>").attr("value", "2").text("MinIntensity")
+            );
+
+            sel = $(
+              '<input title="Color" class="colors_channels col vol_color" type="color" id="vol_color' +
+                volDiv +
+                '" value="#f2c1a5">'
+            ).appendTo(secondRow);
+            vol_Z_Voxel_scale = $(
+              '<input title="Z-voxel scaling" class="vol_set_z_voxel_scale col vol_z_voxel_scale" id="Slider_scale' +
+                volDiv +
+                '" type="text" min="0.1" max="50" step="0.1" value="1">'
+            ).appendTo(secondRow);
+
+            volDiv += 1;
+
+            if (vol_value == "Volume") {
+              vol_myFile = $("#btn1").prop("files");
+              vol_arr.push(vol_myFile);
+            }
+          });
+
+          let isChecked = $("#r1").is(":checked");
+          if (isChecked) {
+            document.getElementById("btn1").disabled = false;
+          } else {
+            document.getElementById("btn1").disabled = true;
+          }
+          document.getElementById("r1").disabled = true;
+        }
+      });
+    </script>
+    <!-- Include the control panel -->
+    {% include 'volApp/control_panel.html' %}
+  </body>
+</html>
