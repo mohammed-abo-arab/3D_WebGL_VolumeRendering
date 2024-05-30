@@ -1,5 +1,19 @@
-// Declare max3DTextureSize at the top level of your script
+// max3DTextureSize at the top level
 let max3DTextureSize;
+let volume_imageData = []; // Declare volume_imageData as an array at the top level
+// Global variable for cropped dimensions
+let croppedDimensions = null;
+let volume_color_val = []; // Define volume_color_val
+let dimen;
+let itkImages = []; // Global variable to store original itkImage data
+let ijkPlanes = []; // Initialize as an empty array
+let renderer; // Initialize as a global variable
+let renderWindow; // Initialize as a global variable
+let downsampledDim = []; // Initialize as a global variable of downsampled dimensions
+let originalDim = [];
+//
+let vtkImageDataOrg;
+let vtkImageData;
 
 document.addEventListener("DOMContentLoaded", function () {
   // Create a canvas element to obtain a WebGL context
@@ -16,9 +30,14 @@ document.addEventListener("DOMContentLoaded", function () {
   max3DTextureSize = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   console.log("Maximum 3D texture size:", max3DTextureSize);
 });
+//////
+/////
 
 /*************** Volume Rendering ********************/
-function webGLVolumeRendering(volume_imageData, volume_color_val) {
+function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
+  // Assign the input data to the top-level variable
+  volume_imageData = volume_imageData_input;
+  volume_color_val = volume_color_val_input; // Assign color values
   var container = document.getElementById("viewContainer");
   if (!container) {
     console.error("Container not found.");
@@ -60,6 +79,7 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
   const widgetManager = vtk.Widgets.Core.vtkWidgetManager.newInstance();
   widgetManager.setRenderer(renderer);
   const widget = vtk.Widgets.Widgets3D.vtkImageCroppingWidget.newInstance();
+
   console.log(widget); // Should log something like vtkImageCroppingWidget
 
   // ----------------------------------------------------------------------------
@@ -120,7 +140,9 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
     vtk.Interaction.Manipulators.vtkMouseCameraTrackballRotateManipulator;
 
   const { vec3, vec2, quat, mat4 } = glMatrix;
-
+  let lastImageData = volume_imageData[volume_imageData.length - 1]; // Get the last vtkImageData object
+  dimen = lastImageData.getDimensions(); // Get the depth (third dimension)
+  console.log("dimen: ", dimen);
   ////////////////////////////////////////////////////////////////////////
   container.style.display = "flex";
   container.style.position = "static";
@@ -166,7 +188,17 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
   volume_sample_Distance = [];
   volume_visibility_control = [];
   volume_imageData_obj = volume_imageData;
-
+  ///////
+  // Function to calculate cropped dimensions
+  function calculateCroppedDimensions(ijkPlanes) {
+    const [minI, maxI, minJ, maxJ, minK, maxK] = ijkPlanes;
+    croppedDimensions = [
+      Math.round(maxI - minI),
+      Math.round(maxJ - minJ),
+      Math.round(maxK - minK),
+    ];
+    console.log("Cropped Dimensions:", croppedDimensions);
+  }
   //////////////////////////////////////
   // Define getCroppingPlanes outside of the for loop
   // const imageData = vtkImageData.newInstance();
@@ -174,7 +206,9 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
     // Access the specific imageData using the provided index
     const imageData = volumeImageData[i];
     // console.log("imageData at index ", i, ":", volumeImageData[i]);
-    // console.log("ijkPlanes:", ijkPlanes);
+    console.log("ijkPlanes:", ijkPlanes);
+    // Extract min and max planes from ijkPlanes
+    calculateCroppedDimensions(ijkPlanes); // Calculate and set global cropped dimensions
 
     // // Ensure the imageData object has the necessary method indexToWorld
     // if (!imageData || typeof imageData.indexToWorld !== "function") {
@@ -298,7 +332,11 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
     widget.copyImageDataDescription(volume_imageData[i]);
 
     const cropState = widget.getWidgetState().getCroppingPlanes();
-
+    ///
+    widget.getWidgetState().onModified(() => {
+      ijkPlanes = widget.getWidgetState().getCroppingPlanes().getPlanes();
+    });
+    ///
     cropState.onModified(() => {
       const planes = getCroppingPlanes(
         volume_imageData,
@@ -449,11 +487,6 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
     widget1.bindMouseListeners();
 
     // Step 3: Setup data array for the widget
-    // Assume volume_imageData[i] provides the necessary data
-    // const dataArray =
-    //   volume_imageData[i].getPointData().getScalars() ||
-    //   volume_imageData[i].getPointData().getArrays()[0];
-    // const dataRange = dataArray.getRange();
     const histogram = new Float32Array(widget1.getNumberOfBins());
     for (let i = 0; i < dataArray.getNumberOfValues(); i++) {
       const value = dataArray.getValue(i);
@@ -474,23 +507,27 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
       vtk.Rendering.Core.vtkColorTransferFunction.newInstance();
 
     // Professional color mapping
-    lookupTable.addRGBPoint(-1000, 0.62, 0.36, 0.18); // Air: dark brown
-    lookupTable.addRGBPoint(-500, 0.25, 0.25, 0.25); // Lung: grey
+    lookupTable.addRGBPoint(-1000, 0.0, 0.0, 0.0); // Air: black
+    lookupTable.addRGBPoint(-600, 0.3, 0.3, 0.3); // Lung: dark grey
+    lookupTable.addRGBPoint(-400, 0.62, 0.36, 0.18); // Fat: brown
     lookupTable.addRGBPoint(0, 0.88, 0.6, 0.29); // Soft Tissue: soft orange
-    lookupTable.addRGBPoint(50, 0.95, 0.64, 0.54); // Skin: light pink, distinguish from soft tissue
+    lookupTable.addRGBPoint(50, 0.95, 0.64, 0.54); // Skin: light pink
+    lookupTable.addRGBPoint(150, 1.0, 0.0, 0.0); // Muscle: red
     lookupTable.addRGBPoint(300, 0.0, 1.0, 0.0); // Peripheral Arteries with Contrast: bright green
     lookupTable.addRGBPoint(500, 1.0, 0.94, 0.95); // Fat: off-white
-    lookupTable.addRGBPoint(1000, 1.0, 1.0, 1.0); // Bone: white
-    lookupTable.addRGBPoint(2000, 0.5, 0.5, 0.29); // Dense Bone: darker yellow
+    lookupTable.addRGBPoint(700, 1.0, 1.0, 1.0); // Bone: white
+    lookupTable.addRGBPoint(2000, 0.8, 0.8, 0.8); // Dense Bone: light grey
 
     // Define a detailed opacity mapping
     piecewiseFunction.addPoint(-1000, 0.0); // Air: fully transparent
-    piecewiseFunction.addPoint(-500, 0.05); // Lung: slightly more opaque
-    piecewiseFunction.addPoint(0, 0.15); // Soft Tissue: slightly opaque
-    piecewiseFunction.addPoint(50, 0.2); // Skin: make slightly more opaque than soft tissue
-    piecewiseFunction.addPoint(300, 0.7); // Peripheral Arteries with Contrast: less transparent to highlight
-    piecewiseFunction.addPoint(500, 0.25); // Fat: more opaque
-    piecewiseFunction.addPoint(1000, 0.85); // Bone: less transparent
+    piecewiseFunction.addPoint(-600, 0.05); // Lung: slightly more opaque
+    piecewiseFunction.addPoint(-400, 0.1); // Fat: slightly opaque
+    piecewiseFunction.addPoint(0, 0.2); // Soft Tissue: slightly opaque
+    piecewiseFunction.addPoint(50, 0.3); // Skin: more opaque
+    piecewiseFunction.addPoint(150, 0.4); // Muscle: more opaque
+    piecewiseFunction.addPoint(300, 0.7); // Peripheral Arteries with Contrast: highlight
+    piecewiseFunction.addPoint(500, 0.5); // Fat: more opaque
+    piecewiseFunction.addPoint(700, 0.85); // Bone: less transparent
     piecewiseFunction.addPoint(2000, 1.0); // Dense Bone: opaque
 
     widget1.applyOpacity(piecewiseFunction);
@@ -509,8 +546,10 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
       widget1.applyOpacity(piecewiseFunction);
       renderWindow.render();
     });
+
     //////////////////////////
   }
+  console.log("checking message1...");
 
   for (e = 0; e < volume_imageData.length; e++) {
     volume_idOpacity = "#setGradientOpacity" + e;
@@ -521,10 +560,12 @@ function webGLVolumeRendering(volume_imageData, volume_color_val) {
     volume_id_Z_scale = "#Slider_scale" + e;
     volume_id_shade = "#shade" + e;
     volume_id_scalar_opacity = "#setScalarOpacityUnitDistance" + e;
+    volume_id_adaptive_resolution = "#setAdaptiveResolution" + e;
 
     d = e;
     trigger_changes_volume(
       volume_id_scalar_opacity,
+      volume_id_adaptive_resolution,
       volume_id_shade,
       volume_idVisibility,
       volume_id_Z_scale,
@@ -591,10 +632,12 @@ const hex2rgba = (hex, alpha = 1) => {
   const [r, g, b] = hex.match(/\w\w/g).map((x) => parseInt(x, 16));
   return `rgba(${r},${g},${b},${alpha})`;
 };
+console.log("checking message2...");
 
 // function to trigger switches
 function trigger_changes_volume(
   volume_id_scalar_opacity,
+  volume_id_adaptive_resolution,
   volume_id_shade,
   volume_idVisibility,
   volume_id_Z_scale,
@@ -615,38 +658,169 @@ function trigger_changes_volume(
     volume_opacity_val.setGradientOpacityMaximumOpacity(0, newVal_OPA); // Gradient
     renderWindow.render();
   });
-  //scalar opacity
-  $(document).on("change", ".vol_set_scalar_opacity", function () {
-    // Get the scalar opacity control value
+  // Scalar opacity
+  $(volume_id_scalar_opacity).change(function () {
     const scalarOpacityValue = parseFloat(this.value);
 
-    // Access the scalar opacity transfer function
     const scalarOpacityTransferFunction = volume_opacity_val.getScalarOpacity();
-
-    // Reset the current points in the piecewise function
     scalarOpacityTransferFunction.removeAllPoints();
 
-    // Add points to the piecewise function to create the gradient
-    // Fully transparent at the start
     scalarOpacityTransferFunction.addPoint(0, 0.0);
-    // Increasing opacity until the control value
     scalarOpacityTransferFunction.addPoint(scalarOpacityValue / 2, 0.5);
-    // Full opacity at the control value
     scalarOpacityTransferFunction.addPoint(scalarOpacityValue, 1.0);
-    // Decreasing opacity after the control value
     scalarOpacityTransferFunction.addPoint(
       scalarOpacityValue + (255 - scalarOpacityValue) / 2,
       0.5
     );
-    // Slightly transparent towards the end
     scalarOpacityTransferFunction.addPoint(255, 0.2);
 
-    // Update the rendering window
     renderWindow.render();
-
-    // Output the new value to the console for verification
     console.log("Updated Scalar Opacity to:", scalarOpacityValue);
   });
+  console.log("checking message3...");
+
+  /// Apply cropped and rerender this part
+  $(volume_id_adaptive_resolution).change(function () {
+    const adaptiveResolutionValue = parseInt(this.value);
+    if (adaptiveResolutionValue === 255) {
+      // Ceil the ijkPlanes values
+      const ceiledIjkPlanes = ijkPlanes.map(Math.floor);
+
+      console.log("Original ijkPlanes (Ceiled):", ceiledIjkPlanes);
+
+      // Render the cropped region with original resolution and spacing
+      replaceCroppedRegionWithOriginalResolution(itkImages, ceiledIjkPlanes);
+    }
+  });
+
+  function replaceCroppedRegionWithOriginalResolution(itkImages, ijkPlanes) {
+    const [iMin, iMax, jMin, jMax, kMin, kMax] = ijkPlanes;
+
+    console.log("ijkPlanes:", ijkPlanes);
+
+    const originalResolutionImages = itkImages.map((itkImage) => {
+      const originalSize = itkImage.originalSize || itkImage.size;
+      let vtkImageData = convertItkToVtkImage(itkImage);
+      console.log("Original resolution part vtkImageData:", vtkImageData);
+
+      const dimensions = vtkImageData.getDimensions();
+      const spacing = vtkImageData.getSpacing();
+      const origin = vtkImageData.getOrigin();
+      const direction = vtkImageData.getDirection();
+      const originalData = vtkImageData.getPointData().getScalars().getData();
+
+      console.log("Original dimensions:", originalSize);
+      console.log("Original spacing:", spacing);
+      console.log("Original origin:", origin);
+      console.log("Original direction:", direction);
+
+      // Ensure indices are within bounds
+      const validIMin = Math.max(0, iMin);
+      const validIMax = Math.min(originalSize[0] - 1, iMax);
+      const validJMin = Math.max(0, jMin);
+      const validJMax = Math.min(originalSize[1] - 1, jMax);
+      const validKMin = Math.max(0, kMin);
+      const validKMax = Math.min(originalSize[2] - 1, kMax);
+
+      // Calculate sub-volume dimensions based on the valid indices
+      let subVolumeDimensions = [
+        validIMax - validIMin + 1,
+        validJMax - validJMin + 1,
+        validKMax - validKMin + 1,
+      ];
+
+      let subVolumeData = new Int16Array(
+        subVolumeDimensions[0] * subVolumeDimensions[1] * subVolumeDimensions[2]
+      );
+
+      // Crop the relevant region from the original data
+      for (let k = validKMin; k <= validKMax; k++) {
+        for (let j = validJMin; j <= validJMax; j++) {
+          for (let i = validIMin; i <= validIMax; i++) {
+            const subVolumeIndex =
+              (k - validKMin) *
+                subVolumeDimensions[0] *
+                subVolumeDimensions[1] +
+              (j - validJMin) * subVolumeDimensions[0] +
+              (i - validIMin);
+            const originalIndex =
+              k * originalSize[0] * originalSize[1] + j * originalSize[0] + i;
+            subVolumeData[subVolumeIndex] = originalData[originalIndex];
+          }
+        }
+      }
+
+      // Create vtkSubVolume with the original data
+      const vtkSubVolume = vtk.Common.DataModel.vtkImageData.newInstance();
+      vtkSubVolume.setDimensions(subVolumeDimensions);
+      vtkSubVolume.setSpacing(spacing);
+      vtkSubVolume.setOrigin(origin);
+      vtkSubVolume.setDirection(direction);
+      vtkSubVolume.getPointData().setScalars(
+        vtk.Common.Core.vtkDataArray.newInstance({
+          values: subVolumeData,
+          numberOfComponents: 1,
+          dataType: vtk.Common.Core.vtkDataArray.VTK_SHORT,
+        })
+      );
+
+      console.log("vtkSubVolume dimensions:", vtkSubVolume.getDimensions());
+      console.log("vtkSubVolume origin:", vtkSubVolume.getOrigin());
+      console.log("vtkSubVolume spacing:", vtkSubVolume.getSpacing());
+
+      // Extract the corresponding part of the original data for comparison
+      const originalSubVolumeData = new Int16Array(
+        subVolumeDimensions[0] * subVolumeDimensions[1] * subVolumeDimensions[2]
+      );
+
+      for (let k = validKMin; k <= validKMax; k++) {
+        for (let j = validJMin; j <= validJMax; j++) {
+          for (let i = validIMin; i <= validIMax; i++) {
+            const originalIndex =
+              k * originalSize[0] * originalSize[1] + j * originalSize[0] + i;
+            const subVolumeIndex =
+              (k - validKMin) *
+                subVolumeDimensions[0] *
+                subVolumeDimensions[1] +
+              (j - validJMin) * subVolumeDimensions[0] +
+              (i - validIMin);
+            originalSubVolumeData[subVolumeIndex] = originalData[originalIndex];
+          }
+        }
+      }
+
+      // Compare the original sub-volume data with vtkSubVolume data
+      if (
+        arraysEqual(subVolumeData, originalSubVolumeData) &&
+        arraysEqual(vtkSubVolume.getDimensions(), subVolumeDimensions) &&
+        arraysEqual(vtkSubVolume.getSpacing(), spacing) &&
+        arraysEqual(vtkSubVolume.getOrigin(), origin) &&
+        arraysEqual(vtkSubVolume.getDirection(), direction)
+      ) {
+        console.log(
+          "vtkSubVolume matches the corresponding part of the original data."
+        );
+      } else {
+        console.log(
+          "vtkSubVolume does not match the corresponding part of the original data."
+        );
+      }
+      console.log("vtkSubVolume:", vtkSubVolume);
+      console.log("originalSubVolumeData:", originalSubVolumeData);
+
+      return vtkSubVolume;
+    });
+
+    webGLVolumeRendering(originalResolutionImages, volume_color_val);
+  }
+
+  function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
+  }
 
   // Control Sample Distance
   $(volume_idDistance).change(function () {
@@ -730,36 +904,42 @@ function vol_process(vol_arrFileList, vol_color_val) {
     let fileExtension = file[0].webkitRelativePath.slice(-4).toLowerCase();
     let isDicom = fileExtension === ".dcm";
     let isNifti = fileExtension === ".nii";
-    let isVTK = fileExtension === ".vtk";
     let isSingleFile = file.length === 1;
 
     const processImageData = ({ image: itkImage, webWorker }) => {
       if (webWorker) webWorker.terminate();
-      console.log("Original dimensions:", itkImage.size);
+      originalDim = itkImage.size;
+      console.log("originalDim dimensions:", originalDim);
+      vtkImageDataOrg = convertItkToVtkImage(itkImage);
+      console.log("vtkImageDataOrg:", vtkImageDataOrg);
 
-      // Simulated StreamingImageFilter application
-      itkImage1 = streamingImageFilter(itkImage, max3DTextureSize);
-      console.log("streamingImageFilter dimensions:", itkImage1.size);
-      let shouldDownsample = itkImage1.size.some(
-        (dim) => dim > max3DTextureSize / 8
-      );
-      if (shouldDownsample) {
-        itkImage1 = downsampleImage(itkImage1, max3DTextureSize / 1);
+      // Store original size before any downsampling
+      itkImage.originalSize = itkImage.size.slice();
+
+      // Apply streaming filter and downsample if needed
+      itkImage = streamingImageFilter(itkImage, max3DTextureSize);
+      console.log("streamingImageFilter dimensions:", itkImage.size);
+      console.log("original data :", itkImage);
+      // Store itkImage in the global array
+      itkImages.push(itkImage);
+      console.log("global data :", itkImages);
+
+      if (itkImage.size.some((dim) => dim > max3DTextureSize / 8)) {
+        itkImage = downsampleImage(itkImage, max3DTextureSize / 1);
       }
+      downsampledDim = itkImage.size;
+      console.log("downsampleImage dimensions:", downsampledDim);
+      //////////// ///////////////// //////////////////
 
-      // Apply volumeCleaning
-      itkImage1 = volumeCleaning(itkImage1);
+      // itkImage = volumeCleaning(itkImage);
+      // console.log("volumeCleaning dimensions:", itkImage.size);
 
-      let vtkImageData = convertItkToVtkImage(itkImage1);
+      let vtkImageData = convertItkToVtkImage(itkImage);
       vol_img.push(vtkImageData);
 
       checkAllFilesProcessed();
     };
-    const handleVTKData = (vtkData) => {
-      // Assume vtkData is the correct format or convert it
-      vol_img.push(vtkData);
-      checkAllFilesProcessed();
-    };
+
     const handleError = (error) => {
       console.error("Error processing files: ", error);
       processingFailed = true;
@@ -771,23 +951,6 @@ function vol_process(vol_arrFileList, vol_color_val) {
         .readImageDICOMFileSeries(file)
         .then(processImageData)
         .catch(handleError);
-    } else if (isVTK) {
-      console.log("Attempting to read VTK file:", file[0]);
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const arrayBuffer = event.target.result;
-        const vtkReader = vtk.IO.XML.vtkXMLPolyDataReader.newInstance();
-        vtkReader.parseAsArrayBuffer(arrayBuffer);
-        const vtkData = vtkReader.getOutputData(0);
-        if (vtkData) {
-          handleVTKData(vtkData);
-        } else {
-          handleError(new Error("Failed to load VTK data"));
-        }
-      };
-      reader.onerror = handleError;
-      reader.readAsArrayBuffer(file[0]);
     } else if (isNifti) {
       itk
         .readImageFile(null, file[0])
@@ -811,96 +974,14 @@ function vol_process(vol_arrFileList, vol_color_val) {
     if (processedCount === vol_arrFileList.length) {
       $("#loading").hide();
       if (!processingFailed) {
-        const totalMemoryMB = estimateTotalMemoryUsage(vol_img);
-        console.log(
-          `Total estimated memory usage for all images: ${totalMemoryMB.toFixed(
-            2
-          )} MB`
-        );
-        compareMemoryWithMaxTextureSize(
-          totalMemoryMB,
-          max3DTextureSize,
-          vol_img
-        );
-        webGLVolumeRendering(vol_img, vol_color_val);
+        try {
+          webGLVolumeRendering(vol_img, vol_color_val);
+        } catch (error) {
+          console.error("Error in webGLVolumeRendering:", error);
+        }
       }
     }
   }
-  function compareMemoryWithMaxTextureSize(
-    totalMemoryMB,
-    maxTextureSize,
-    vol_img
-  ) {
-    // Calculate the average byte size per voxel from the vol_img dataset
-    const byteSizePerVoxel = calculateAverageByteSize(vol_img);
-
-    // Calculate the maximum texture memory assuming the maximum dimension cube
-    // const maxTextureMB =
-    //   (maxTextureSize * maxTextureSize * maxTextureSize * byteSizePerVoxel) /
-    //   (1024 * 1024);
-    const maxTextureMB =
-      (maxTextureSize * maxTextureSize * maxTextureSize) / (1024 * 1024);
-    console.log(`Maximum 3D texture capacity (MB): ${maxTextureMB.toFixed(2)}`);
-
-    if (totalMemoryMB > maxTextureMB) {
-      console.warn(
-        "Warning: Estimated memory usage exceeds the maximum 3D texture capacity!"
-      );
-    } else {
-      console.log(
-        "Estimated memory usage is within the maximum 3D texture capacity."
-      );
-    }
-  }
-
-  function calculateAverageByteSize(vol_img) {
-    let totalByteSize = 0;
-    let count = 0;
-
-    vol_img.forEach((vtkImageData) => {
-      const pointData = vtkImageData.getPointData().getScalars();
-      const dataType = pointData.getDataType();
-      const byteSize = getDataTypeSize(dataType);
-      totalByteSize += byteSize;
-      count++;
-    });
-
-    return count > 0 ? totalByteSize / count : 0; // Avoid division by zero
-  }
-  function estimateTotalMemoryUsage(vol_img) {
-    let totalMemoryMB = 0;
-
-    vol_img.forEach((vtkImageData) => {
-      const components = vtkImageData
-        .getPointData()
-        .getScalars()
-        .getNumberOfComponents();
-      const numPixels = vtkImageData.getNumberOfPoints();
-      const dataType = vtkImageData.getPointData().getScalars().getDataType();
-      const dataTypeSize = getDataTypeSize(dataType);
-
-      const totalBytes = numPixels * components * dataTypeSize;
-      totalMemoryMB += totalBytes / (1024 * 1024); // Convert bytes to MB
-    });
-
-    return totalMemoryMB;
-  }
-
-  function getDataTypeSize(dataType) {
-    // Map data types to sizes
-    const sizeMap = {
-      Uint8Array: 1,
-      Int8Array: 1,
-      Uint16Array: 2,
-      Int16Array: 2,
-      Uint32Array: 4,
-      Int32Array: 4,
-      Float32Array: 4,
-      Float64Array: 8,
-    };
-    return sizeMap[dataType] || 0; // Default to 0 if unknown
-  }
-
   // Implementing a streaming image filter
   function streamingImageFilter(itkImage, max3DTextureSize) {
     const { size, spacing, data } = itkImage;
@@ -1045,6 +1126,7 @@ function vol_process(vol_arrFileList, vol_color_val) {
   }
 
   //implementation of the volumeCleaning function
+  /*
   function volumeCleaning(itkImage) {
     const { size, data } = itkImage;
 
@@ -1220,5 +1302,6 @@ function vol_process(vol_arrFileList, vol_color_val) {
       return { labels, numLabels };
     }
   }
+  */
 }
 ///////////////////////////

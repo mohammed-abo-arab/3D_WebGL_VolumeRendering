@@ -98,6 +98,7 @@
               <p>
                 <b title="Gradient Opacity">Gradient</b>
                 <b title="Scalar Opacity Unit Distance">ScalarUnit</b>
+                <b title="Adaptive Resolution">Resolution</b>
                 <b title="Sample Distance">Sample-Dis</b>
                 <b title="Blending Modes">Blending</b>
                 <b title="Color Transfer Function">Color</b>
@@ -243,6 +244,11 @@
               '<input title="Scalar Opacity" class="vol_set_scalar_opacity col vol_scalar_opacity" id="setScalarOpacityUnitDistance' +
                 volDiv +
                 '" type="range" min="0" max="255" step="1" value="127">'
+            ).appendTo(firstRow);
+            vol_adaptive_resolution = $(
+              '<input title="Adaptive Resolution" class="vol_set_adaptive_resolution col .vol_adaptive_resolution" id="setAdaptiveResolution' +
+                volDiv +
+                '" type="range" min="0" max="255" step="255" value="0">'
             ).appendTo(firstRow);
             vol_distance = $(
               '<input title="Sample Distance" class="vol_set_distance col vol_distance" id="setSampleDistance' +
