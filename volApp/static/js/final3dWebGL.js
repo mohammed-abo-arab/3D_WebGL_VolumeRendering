@@ -1,6 +1,7 @@
 // max3DTextureSize at the top level
 let max3DTextureSize;
 let volume_imageData = []; // Declare volume_imageData as an array at the top level
+
 // Global variable for cropped dimensions
 let croppedDimensions = null;
 let volume_color_val = []; // Define volume_color_val
@@ -14,11 +15,17 @@ let originalDim = [];
 //
 let vtkImageDataOrg;
 let vtkImageData;
+let originalResolutionImages = []; // Global variable to store original resolution images
+//
+let combinedImage1 = []; // Initialize original data as a global variable
+let combinedDimensions = []; // Global variable to store combined dimensions
+let volImgDimensions = []; // Global variable to store the dimension of downsample data
+////////////////////////////////////////////////////////////////////////////////
+let chunkSize;
+let maxUploadMemoryMB;
 
 document.addEventListener("DOMContentLoaded", function () {
-  // Create a canvas element to obtain a WebGL context
   const canvas = document.createElement("canvas");
-  // Attempt to get a WebGL 2.0 context
   const gl = canvas.getContext("webgl2");
 
   if (!gl) {
@@ -29,6 +36,28 @@ document.addEventListener("DOMContentLoaded", function () {
   // Query the maximum 3D texture size allowed by WebGL 2.0
   max3DTextureSize = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
   console.log("Maximum 3D texture size:", max3DTextureSize);
+  // Check available memory
+  if (performance.memory) {
+    const memory = performance.memory;
+    const jsHeapSizeLimitMB = memory.jsHeapSizeLimit / 1024 / 1024; // Convert to MB
+
+    // Set maxUploadMemoryMB to a fraction of the jsHeapSizeLimit
+    maxUploadMemoryMB = jsHeapSizeLimitMB * 0.75; // Use 75% of the total heap size for uploads
+    console.log("Max Upload Memory (MB):", maxUploadMemoryMB);
+  } else {
+    console.log("performance.memory API is not supported in this browser.");
+    maxUploadMemoryMB = 2500; // Fallback value
+  }
+
+  const maxUploadMemoryBytes = maxUploadMemoryMB * 1024 * 1024; // Convert to bytes
+
+  // Calculate chunkSize dynamically based on the constraints
+  const chunkFactor = 0.25; // Fraction of max3DTextureSize to use
+  chunkSize = Math.min(
+    Math.floor(max3DTextureSize * chunkFactor),
+    Math.floor(maxUploadMemoryBytes / 2)
+  );
+  console.log("Computed chunk size:", chunkSize);
 });
 //////
 /////
@@ -46,8 +75,8 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
   ////////////////////////////////
 
   // Create a render window and renderer
-  const renderWindow = vtk.Rendering.Core.vtkRenderWindow.newInstance();
-  const renderer = vtk.Rendering.Core.vtkRenderer.newInstance();
+  renderWindow = vtk.Rendering.Core.vtkRenderWindow.newInstance();
+  renderer = vtk.Rendering.Core.vtkRenderer.newInstance();
   renderWindow.addRenderer(renderer);
 
   // Create an OpenGL rendering window and link it with the DOM container
@@ -615,8 +644,6 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
 
   renderer.resetCamera();
   renderer.resetCameraClippingRange();
-  // Record the start time for performance measurement
-  renderWindow.render();
   volume_vtk.setVisibility(true);
 
   // Canvas reset
@@ -625,6 +652,234 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
     renderer.resetCamera();
     renderWindow.render();
   });
+  ////
+  // Performance Metrics
+  // Performance Metrics
+  let frameCount = 0;
+  let startTime = performance.now();
+  let totalRenderingTime = 0;
+  let totalFPS = 0;
+  let intervalCount = 0;
+  const fpsInterval = 1000; // Measure over one-second intervals
+  const maxIntervals = 10; // Number of intervals to average over
+  let averageFPS = 0;
+  let averageRenderingTime = 0;
+  let renderingTimes = []; // Array to hold rendering times for averaging
+  let fpsData = []; // Array to store average FPS data for post-processing
+  let renderingTimeData = []; // Array to store average rendering time data for post-processing
+  let standardDeviationData = []; // Array to store standard deviation of rendering times
+  let fpsStandardDeviationData = []; // Array to store standard deviation of FPS
+
+  function measurePerformance() {
+    // Start Rendering Time measurement
+    const renderStart = performance.now();
+
+    // Render the frame
+    renderWindow.render();
+
+    // End Rendering Time measurement
+    const renderEnd = performance.now();
+    const renderingTime = renderEnd - renderStart;
+    totalRenderingTime += renderingTime;
+    renderingTimes.push(renderingTime);
+
+    frameCount++;
+
+    const now = performance.now();
+    const elapsedTime = now - startTime;
+
+    if (elapsedTime >= fpsInterval) {
+      const fps = frameCount / (elapsedTime / 1000);
+      const averageRenderingTimeThisInterval =
+        renderingTimes.reduce((a, b) => a + b, 0) / renderingTimes.length;
+      const renderingTimeStandardDeviation =
+        calculateStandardDeviation(renderingTimes);
+
+      totalFPS += fps;
+      intervalCount++;
+
+      console.log(`FPS: ${fps.toFixed(2)}`);
+      console.log(
+        `Average Rendering Time this interval: ${averageRenderingTimeThisInterval.toFixed(
+          2
+        )} ms`
+      );
+      console.log(
+        `Standard Deviation of Rendering Time: ${renderingTimeStandardDeviation.toFixed(
+          2
+        )} ms`
+      );
+
+      // Store data for post-processing
+      fpsData.push(fps);
+      renderingTimeData.push(averageRenderingTimeThisInterval);
+      standardDeviationData.push(renderingTimeStandardDeviation);
+
+      // Reset counters for this interval
+      frameCount = 0;
+      totalRenderingTime = 0;
+      renderingTimes = [];
+      startTime = now;
+
+      // Calculate averages over the fixed number of intervals
+      if (intervalCount >= maxIntervals) {
+        averageFPS = totalFPS / maxIntervals;
+        averageRenderingTime =
+          renderingTimeData.reduce((a, b) => a + b, 0) / maxIntervals;
+        const averageRenderingTimeStandardDeviation =
+          standardDeviationData.reduce((a, b) => a + b, 0) / maxIntervals;
+        const averageFPSStandardDeviation = calculateStandardDeviation(fpsData);
+
+        console.log(
+          `Average FPS over ${maxIntervals} intervals: ${averageFPS.toFixed(2)}`
+        );
+        console.log(
+          `Average Rendering Time over ${maxIntervals} intervals: ${averageRenderingTime.toFixed(
+            2
+          )} ms`
+        );
+        console.log(
+          `Average Standard Deviation of Rendering Time over ${maxIntervals} intervals: ${averageRenderingTimeStandardDeviation.toFixed(
+            2
+          )} ms`
+        );
+        console.log(
+          `Average Standard Deviation of FPS over ${maxIntervals} intervals: ${averageFPSStandardDeviation.toFixed(
+            2
+          )}`
+        );
+
+        // Save the performance data
+        savePerformanceData(
+          fpsData,
+          renderingTimeData,
+          standardDeviationData,
+          averageFPSStandardDeviation
+        );
+
+        // Reset totals and interval count
+        totalFPS = 0;
+        intervalCount = 0;
+        fpsData = [];
+        renderingTimeData = [];
+        standardDeviationData = [];
+      }
+    }
+
+    requestAnimationFrame(measurePerformance);
+  }
+
+  // Start measuring performance
+  requestAnimationFrame(measurePerformance);
+
+  // Utility function to save performance data for further analysis
+  function savePerformanceData(
+    fpsData,
+    renderingTimeData,
+    standardDeviationData,
+    averageFPSStandardDeviation
+  ) {
+    const averageFPS = fpsData.reduce((a, b) => a + b, 0) / fpsData.length;
+    const averageRenderingTime =
+      renderingTimeData.reduce((a, b) => a + b, 0) / renderingTimeData.length;
+    const averageStandardDeviation =
+      standardDeviationData.reduce((a, b) => a + b, 0) /
+      standardDeviationData.length;
+
+    const data = {
+      averageFPS,
+      averageRenderingTime,
+      averageStandardDeviation,
+      averageFPSStandardDeviation,
+      fpsData,
+      renderingTimeData,
+      standardDeviationData,
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "performanceData.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Function to calculate standard deviation
+  function calculateStandardDeviation(values) {
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const squareDiffs = values.map((value) => {
+      const diff = value - mean;
+      return diff * diff;
+    });
+    const avgSquareDiff =
+      squareDiffs.reduce((a, b) => a + b, 0) / squareDiffs.length;
+    return Math.sqrt(avgSquareDiff);
+  }
+
+  // Function to log GPU information
+  function logGPUInfo() {
+    const canvas = document.createElement("canvas");
+    const gl =
+      canvas.getContext("webgl2") ||
+      canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl");
+
+    if (!gl) {
+      console.error("WebGL not supported");
+      return;
+    }
+
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    if (debugInfo) {
+      const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+      const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+      console.log(`GPU Vendor: ${vendor}`);
+      console.log(`GPU Renderer: ${renderer}`);
+    } else {
+      console.log("WEBGL_debug_renderer_info extension not supported");
+    }
+
+    const maxTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+    const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    const maxCombinedTextureImageUnits = gl.getParameter(
+      gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS
+    );
+    const maxVertexTextureImageUnits = gl.getParameter(
+      gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS
+    );
+    const maxCubeMapTextureSize = gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE);
+    const maxRenderBufferSize = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+    const maxVertexAttributes = gl.getParameter(gl.MAX_VERTEX_ATTRIBS);
+    const maxVertexUniformVectors = gl.getParameter(
+      gl.MAX_VERTEX_UNIFORM_VECTORS
+    );
+    const maxVaryingVectors = gl.getParameter(gl.MAX_VARYING_VECTORS);
+    const maxFragmentUniformVectors = gl.getParameter(
+      gl.MAX_FRAGMENT_UNIFORM_VECTORS
+    );
+    const max3DTextureSize = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
+
+    console.log(`Max Texture Units: ${maxTextureUnits}`);
+    console.log(`Max Texture Size: ${maxTextureSize}`);
+    console.log(
+      `Max Combined Texture Image Units: ${maxCombinedTextureImageUnits}`
+    );
+    console.log(
+      `Max Vertex Texture Image Units: ${maxVertexTextureImageUnits}`
+    );
+    console.log(`Max Cube Map Texture Size: ${maxCubeMapTextureSize}`);
+    console.log(`Max Render Buffer Size: ${maxRenderBufferSize}`);
+    console.log(`Max Vertex Attributes: ${maxVertexAttributes}`);
+    console.log(`Max Vertex Uniform Vectors: ${maxVertexUniformVectors}`);
+    console.log(`Max Varying Vectors: ${maxVaryingVectors}`);
+    console.log(`Max Fragment Uniform Vectors: ${maxFragmentUniformVectors}`);
+    console.log(`Max 3D Texture Size: ${max3DTextureSize}`);
+  }
+
+  logGPUInfo();
 }
 
 // function to convert HEX to RGBA string
@@ -689,129 +944,157 @@ function trigger_changes_volume(
       console.log("Original ijkPlanes (Ceiled):", ceiledIjkPlanes);
 
       // Render the cropped region with original resolution and spacing
-      replaceCroppedRegionWithOriginalResolution(itkImages, ceiledIjkPlanes);
+      replaceCroppedRegionWithOriginalResolution(
+        combinedImage1,
+        ceiledIjkPlanes
+      );
     }
   });
 
-  function replaceCroppedRegionWithOriginalResolution(itkImages, ijkPlanes) {
+  function replaceCroppedRegionWithOriginalResolution(
+    combinedImage1,
+    ijkPlanes
+  ) {
+    // Store the current camera settings
+    const cameraSettings = storeCameraSettings(renderer);
     const [iMin, iMax, jMin, jMax, kMin, kMax] = ijkPlanes;
 
     console.log("ijkPlanes:", ijkPlanes);
+    console.log("combinedImage1:", combinedImage1);
+    console.log("itkImages:", itkImages);
 
-    const originalResolutionImages = itkImages.map((itkImage) => {
-      const originalSize = itkImage.originalSize || itkImage.size;
-      let vtkImageData = convertItkToVtkImage(itkImage);
-      console.log("Original resolution part vtkImageData:", vtkImageData);
+    // Use global variables for original and downsampled dimensions
+    const originalSize = combinedDimensions; // Size of the combined image
+    const downsampledSize = volImgDimensions; // Size of the downsampled image
 
-      const dimensions = vtkImageData.getDimensions();
-      const spacing = vtkImageData.getSpacing();
-      const origin = vtkImageData.getOrigin();
-      const direction = vtkImageData.getDirection();
-      const originalData = vtkImageData.getPointData().getScalars().getData();
+    // Calculate the downsample factor for each dimension
+    const downsampleFactor = [
+      originalSize[0] / downsampledSize[0],
+      originalSize[1] / downsampledSize[1],
+      originalSize[2] / downsampledSize[2],
+    ];
 
-      console.log("Original dimensions:", originalSize);
-      console.log("Original spacing:", spacing);
-      console.log("Original origin:", origin);
-      console.log("Original direction:", direction);
+    let vtkImageData = convertItkToVtkImage(combinedImage1);
+    console.log("Original resolution part vtkImageData:", vtkImageData);
 
-      // Ensure indices are within bounds
-      const validIMin = Math.max(0, iMin);
-      const validIMax = Math.min(originalSize[0] - 1, iMax);
-      const validJMin = Math.max(0, jMin);
-      const validJMax = Math.min(originalSize[1] - 1, jMax);
-      const validKMin = Math.max(0, kMin);
-      const validKMax = Math.min(originalSize[2] - 1, kMax);
+    const originalData = combinedImage1.data;
+    const spacing = vtkImageData.getSpacing();
+    const origin = vtkImageData.getOrigin();
+    const direction = vtkImageData.getDirection();
 
-      // Calculate sub-volume dimensions based on the valid indices
-      let subVolumeDimensions = [
-        validIMax - validIMin + 1,
-        validJMax - validJMin + 1,
-        validKMax - validKMin + 1,
-      ];
+    console.log("Original dimensions:", originalSize);
+    console.log("Downsampled dimensions:", downsampledSize);
+    console.log("Original spacing:", spacing);
+    console.log("Original origin:", origin);
+    console.log("Original direction:", direction);
 
-      let subVolumeData = new Int16Array(
-        subVolumeDimensions[0] * subVolumeDimensions[1] * subVolumeDimensions[2]
-      );
+    // Ensure indices are within bounds and scaled for downsampling
+    const validIMin = Math.max(0, Math.floor(iMin * downsampleFactor[0]));
+    const validIMax = Math.min(
+      originalSize[0] - 1,
+      Math.floor(iMax * downsampleFactor[0])
+    );
+    const validJMin = Math.max(0, Math.floor(jMin * downsampleFactor[1]));
+    const validJMax = Math.min(
+      originalSize[1] - 1,
+      Math.floor(jMax * downsampleFactor[1])
+    );
+    const validKMin = Math.max(0, Math.floor(kMin * downsampleFactor[2]));
+    const validKMax = Math.min(
+      originalSize[2] - 1,
+      Math.floor(kMax * downsampleFactor[2])
+    );
 
-      // Crop the relevant region from the original data
-      for (let k = validKMin; k <= validKMax; k++) {
-        for (let j = validJMin; j <= validJMax; j++) {
-          for (let i = validIMin; i <= validIMax; i++) {
-            const subVolumeIndex =
-              (k - validKMin) *
-                subVolumeDimensions[0] *
-                subVolumeDimensions[1] +
-              (j - validJMin) * subVolumeDimensions[0] +
-              (i - validIMin);
-            const originalIndex =
-              k * originalSize[0] * originalSize[1] + j * originalSize[0] + i;
-            subVolumeData[subVolumeIndex] = originalData[originalIndex];
-          }
+    // Calculate sub-volume dimensions based on the valid indices
+    let subVolumeDimensions = [
+      validIMax - validIMin + 1,
+      validJMax - validJMin + 1,
+      validKMax - validKMin + 1,
+    ];
+
+    let subVolumeData = new Int16Array(
+      subVolumeDimensions[0] * subVolumeDimensions[1] * subVolumeDimensions[2]
+    );
+
+    // Crop the relevant region from the original data
+    for (let k = validKMin; k <= validKMax; k++) {
+      for (let j = validJMin; j <= validJMax; j++) {
+        for (let i = validIMin; i <= validIMax; i++) {
+          const subVolumeIndex =
+            (k - validKMin) * subVolumeDimensions[0] * subVolumeDimensions[1] +
+            (j - validJMin) * subVolumeDimensions[0] +
+            (i - validIMin);
+          const originalIndex =
+            k * originalSize[0] * originalSize[1] + j * originalSize[0] + i;
+          subVolumeData[subVolumeIndex] = originalData[originalIndex];
         }
       }
+    }
 
-      // Create vtkSubVolume with the original data
-      const vtkSubVolume = vtk.Common.DataModel.vtkImageData.newInstance();
-      vtkSubVolume.setDimensions(subVolumeDimensions);
-      vtkSubVolume.setSpacing(spacing);
-      vtkSubVolume.setOrigin(origin);
-      vtkSubVolume.setDirection(direction);
-      vtkSubVolume.getPointData().setScalars(
-        vtk.Common.Core.vtkDataArray.newInstance({
-          values: subVolumeData,
-          numberOfComponents: 1,
-          dataType: vtk.Common.Core.vtkDataArray.VTK_SHORT,
-        })
-      );
+    // Create vtkSubVolume with the original data
+    const vtkSubVolume = vtk.Common.DataModel.vtkImageData.newInstance();
+    vtkSubVolume.setDimensions(subVolumeDimensions);
+    vtkSubVolume.setSpacing(spacing);
+    vtkSubVolume.setOrigin(origin);
+    vtkSubVolume.setDirection(direction);
+    vtkSubVolume.getPointData().setScalars(
+      vtk.Common.Core.vtkDataArray.newInstance({
+        values: subVolumeData,
+        numberOfComponents: 1,
+        dataType: vtk.Common.Core.vtkDataArray.VTK_SHORT,
+      })
+    );
 
-      console.log("vtkSubVolume dimensions:", vtkSubVolume.getDimensions());
-      console.log("vtkSubVolume origin:", vtkSubVolume.getOrigin());
-      console.log("vtkSubVolume spacing:", vtkSubVolume.getSpacing());
+    console.log("vtkSubVolume dimensions:", vtkSubVolume.getDimensions());
+    console.log("vtkSubVolume origin:", vtkSubVolume.getOrigin());
+    console.log("vtkSubVolume spacing:", vtkSubVolume.getSpacing());
 
-      // Extract the corresponding part of the original data for comparison
-      const originalSubVolumeData = new Int16Array(
-        subVolumeDimensions[0] * subVolumeDimensions[1] * subVolumeDimensions[2]
-      );
+    // Extract the corresponding part of the original data for comparison
+    const originalSubVolumeData = new Int16Array(
+      subVolumeDimensions[0] * subVolumeDimensions[1] * subVolumeDimensions[2]
+    );
 
-      for (let k = validKMin; k <= validKMax; k++) {
-        for (let j = validJMin; j <= validJMax; j++) {
-          for (let i = validIMin; i <= validIMax; i++) {
-            const originalIndex =
-              k * originalSize[0] * originalSize[1] + j * originalSize[0] + i;
-            const subVolumeIndex =
-              (k - validKMin) *
-                subVolumeDimensions[0] *
-                subVolumeDimensions[1] +
-              (j - validJMin) * subVolumeDimensions[0] +
-              (i - validIMin);
-            originalSubVolumeData[subVolumeIndex] = originalData[originalIndex];
-          }
+    for (let k = validKMin; k <= validKMax; k++) {
+      for (let j = validJMin; j <= validJMax; j++) {
+        for (let i = validIMin; i <= validIMax; i++) {
+          const originalIndex =
+            k * originalSize[0] * originalSize[1] + j * originalSize[0] + i;
+          const subVolumeIndex =
+            (k - validKMin) * subVolumeDimensions[0] * subVolumeDimensions[1] +
+            (j - validJMin) * subVolumeDimensions[0] +
+            (i - validIMin);
+          originalSubVolumeData[subVolumeIndex] = originalData[originalIndex];
         }
       }
+    }
 
-      // Compare the original sub-volume data with vtkSubVolume data
-      if (
-        arraysEqual(subVolumeData, originalSubVolumeData) &&
-        arraysEqual(vtkSubVolume.getDimensions(), subVolumeDimensions) &&
-        arraysEqual(vtkSubVolume.getSpacing(), spacing) &&
-        arraysEqual(vtkSubVolume.getOrigin(), origin) &&
-        arraysEqual(vtkSubVolume.getDirection(), direction)
-      ) {
-        console.log(
-          "vtkSubVolume matches the corresponding part of the original data."
-        );
-      } else {
-        console.log(
-          "vtkSubVolume does not match the corresponding part of the original data."
-        );
-      }
-      console.log("vtkSubVolume:", vtkSubVolume);
-      console.log("originalSubVolumeData:", originalSubVolumeData);
+    // Compare the original sub-volume data with vtkSubVolume data
+    if (
+      arraysEqual(subVolumeData, originalSubVolumeData) &&
+      arraysEqual(vtkSubVolume.getDimensions(), subVolumeDimensions) &&
+      arraysEqual(vtkSubVolume.getSpacing(), spacing) &&
+      arraysEqual(vtkSubVolume.getOrigin(), origin) &&
+      arraysEqual(vtkSubVolume.getDirection(), direction)
+    ) {
+      console.log(
+        "vtkSubVolume matches the corresponding part of the original data."
+      );
+    } else {
+      console.log(
+        "vtkSubVolume does not match the corresponding part of the original data."
+      );
+    }
+    console.log("vtkSubVolume:", vtkSubVolume);
+    console.log("originalSubVolumeData:", originalSubVolumeData);
 
-      return vtkSubVolume;
-    });
+    webGLVolumeRendering([vtkSubVolume], volume_color_val);
 
-    webGLVolumeRendering(originalResolutionImages, volume_color_val);
+    // Restore the camera settings after rendering
+    restoreCameraSettings(renderer, cameraSettings);
+    // Adjust the camera to fit the new bounds
+    renderer.resetCamera();
+    renderer.resetCameraClippingRange();
+    renderWindow.render();
   }
 
   function arraysEqual(a, b) {
@@ -820,6 +1103,24 @@ function trigger_changes_volume(
       if (a[i] !== b[i]) return false;
     }
     return true;
+  }
+  // Function to store camera settings
+  function storeCameraSettings(renderer) {
+    const camera = renderer.getActiveCamera();
+    return {
+      position: camera.getPosition(),
+      focalPoint: camera.getFocalPoint(),
+      viewUp: camera.getViewUp(),
+    };
+  }
+
+  // Function to restore camera settings
+  function restoreCameraSettings(renderer, settings) {
+    const camera = renderer.getActiveCamera();
+    camera.setPosition(...settings.position);
+    camera.setFocalPoint(...settings.focalPoint);
+    camera.setViewUp(...settings.viewUp);
+    renderer.resetCameraClippingRange();
   }
 
   // Control Sample Distance
@@ -895,16 +1196,65 @@ function trigger_changes_volume(
 }
 
 /***** Callback function for Volume rendering *************************/
+// Modify vol_process to store originalSize before downsampling
 function vol_process(vol_arrFileList, vol_color_val) {
   let vol_img = [];
-  let processedCount = 0;
   let processingFailed = false;
+  let originalDim, vtkImageDataOrg;
+  let totalChunks = 0;
+  let processedChunks = 0;
 
-  vol_arrFileList.forEach((file, index) => {
-    let fileExtension = file[0].webkitRelativePath.slice(-4).toLowerCase();
-    let isDicom = fileExtension === ".dcm";
-    let isNifti = fileExtension === ".nii";
-    let isSingleFile = file.length === 1;
+  // Function to log memory usage in MB
+  function logMemoryUsage(label) {
+    if (performance.memory) {
+      const memory = performance.memory;
+      const jsHeapSizeLimitMB = (memory.jsHeapSizeLimit / 1024 / 1024).toFixed(
+        2
+      );
+      const totalJSHeapSizeMB = (memory.totalJSHeapSize / 1024 / 1024).toFixed(
+        2
+      );
+      const usedJSHeapSizeMB = (memory.usedJSHeapSize / 1024 / 1024).toFixed(2);
+
+      console.log(`${label} - JS Heap Size Limit: ${jsHeapSizeLimitMB} MB`);
+      console.log(`${label} - Total JS Heap Size: ${totalJSHeapSizeMB} MB`);
+      console.log(`${label} - Used JS Heap Size: ${usedJSHeapSizeMB} MB`);
+    } else {
+      console.log(
+        `${label} - performance.memory API is not supported in this browser.`
+      );
+    }
+  }
+
+  // Initial Memory Usage
+  logMemoryUsage("Initial");
+
+  // Convert FileList to array if necessary
+  const filesArray = Array.isArray(vol_arrFileList)
+    ? vol_arrFileList
+    : Array.from(vol_arrFileList);
+
+  // Calculate the total number of chunks
+  filesArray.forEach((file) => {
+    const fileExtension = file[0].webkitRelativePath.slice(-4).toLowerCase();
+    const isDicom = fileExtension === ".dcm";
+    const isNifti = fileExtension === ".nii";
+    const isSingleFile = file.length === 1;
+
+    if (isDicom || isNifti || !isSingleFile) {
+      totalChunks += Math.ceil(file.length / chunkSize);
+    } else {
+      totalChunks += 1; // Single file is one chunk
+    }
+  });
+
+  console.log(`Total chunks to process: ${totalChunks}`);
+
+  filesArray.forEach((file) => {
+    const fileExtension = file[0].webkitRelativePath.slice(-4).toLowerCase();
+    const isDicom = fileExtension === ".dcm";
+    const isNifti = fileExtension === ".nii";
+    const isSingleFile = file.length === 1;
 
     const processImageData = ({ image: itkImage, webWorker }) => {
       if (webWorker) webWorker.terminate();
@@ -916,165 +1266,154 @@ function vol_process(vol_arrFileList, vol_color_val) {
       // Store original size before any downsampling
       itkImage.originalSize = itkImage.size.slice();
 
-      // Apply streaming filter and downsample if needed
-      itkImage = streamingImageFilter(itkImage, max3DTextureSize);
-      console.log("streamingImageFilter dimensions:", itkImage.size);
-      console.log("original data :", itkImage);
-      // Store itkImage in the global array
-      itkImages.push(itkImage);
-      console.log("global data :", itkImages);
+      // Process image chunks and store in itkImages
+      streamingImageChunks(itkImage, max3DTextureSize)
+        .then((processedChunksArray) => {
+          itkImages.push(...processedChunksArray);
+          processedChunks += processedChunksArray.length;
+          console.log(`Processed chunks: ${processedChunks}/${totalChunks}`);
+          logMemoryUsage(`After processing chunk ${processedChunks}`);
 
-      if (itkImage.size.some((dim) => dim > max3DTextureSize / 8)) {
-        itkImage = downsampleImage(itkImage, max3DTextureSize / 1);
-      }
-      downsampledDim = itkImage.size;
-      console.log("downsampleImage dimensions:", downsampledDim);
-      //////////// ///////////////// //////////////////
-
-      // itkImage = volumeCleaning(itkImage);
-      // console.log("volumeCleaning dimensions:", itkImage.size);
-
-      let vtkImageData = convertItkToVtkImage(itkImage);
-      vol_img.push(vtkImageData);
-
-      checkAllFilesProcessed();
+          if (processedChunks === totalChunks) {
+            combineAndRender(itkImages);
+          }
+        })
+        .catch((error) => {
+          console.error("Error processing image chunks: ", error);
+          processingFailed = true;
+        });
     };
 
     const handleError = (error) => {
       console.error("Error processing files: ", error);
       processingFailed = true;
-      checkAllFilesProcessed();
     };
 
+    let promise;
     if (isDicom) {
-      itk
-        .readImageDICOMFileSeries(file)
-        .then(processImageData)
-        .catch(handleError);
+      promise = new Promise((resolve, reject) => {
+        readDicomInChunks(
+          file,
+          chunkSize,
+          (result) => {
+            processImageData(result);
+            resolve();
+          },
+          reject
+        );
+      });
     } else if (isNifti) {
-      itk
-        .readImageFile(null, file[0])
-        .then(processImageData)
-        .catch(handleError);
+      promise = new Promise((resolve, reject) => {
+        readNiftiInChunks(
+          file,
+          chunkSize,
+          (result) => {
+            processImageData(result);
+            resolve();
+          },
+          reject
+        );
+      });
     } else if (!isSingleFile) {
-      itk
+      promise = itk
         .readImageFileSeries(file, 1.0, 0.0)
         .then(processImageData)
         .catch(handleError);
     } else {
-      itk
+      promise = itk
         .readImageFile(null, file[0])
         .then(processImageData)
         .catch(handleError);
     }
   });
 
-  function checkAllFilesProcessed() {
-    processedCount++;
-    if (processedCount === vol_arrFileList.length) {
+  function combineAndRender(itkImages) {
+    if (!processingFailed) {
+      combinedImage1 = combineChunks(itkImages);
+      console.log("combinedImage1:", combinedImage1);
+      let combinedImage = combinedImage1;
+
+      // Downsample combined image if needed
+      if (
+        combinedImage1.size.some((dim) => dim > max3DTextureSize / totalChunks)
+      ) {
+        combinedImage = downsampleImage(combinedImage1, max3DTextureSize / 2);
+      }
+
+      const vtkImageData = convertItkToVtkImage(combinedImage);
+      vol_img.push(vtkImageData);
+
+      // Log the dimensions of vol_img
+      volImgDimensions = vtkImageData.getDimensions();
+      console.log("vol_img dimensions:", volImgDimensions);
+
       $("#loading").hide();
-      if (!processingFailed) {
-        try {
-          webGLVolumeRendering(vol_img, vol_color_val);
-        } catch (error) {
-          console.error("Error in webGLVolumeRendering:", error);
-        }
-      }
+      webGLVolumeRendering(vol_img, vol_color_val);
+
+      // Final Memory Usage
+      logMemoryUsage("Final");
     }
   }
-  // Implementing a streaming image filter
-  function streamingImageFilter(itkImage, max3DTextureSize) {
-    const { size, spacing, data } = itkImage;
 
-    // Determine the divisor for chunk size dynamically based on max3DTextureSize
-    const divisor = Math.ceil(max3DTextureSize / 512); // Adjust 512 based on the hardware capabilities
-    console.log(`divisor: ${divisor}`);
-    // Determine chunk size as a part of the z-dimension, making it dynamic
-    const chunkSize = Math.max(1, Math.floor(size[2] / divisor)); // depends on max3DTextureSize
+  function streamingImageChunks(itkImage, max3DTextureSize) {
+    return new Promise((resolve, reject) => {
+      const { size, spacing, data } = itkImage;
+      const [width, height, depth] = size;
+      const maxChunks = Math.ceil(depth / chunkSize);
+      const chunks = [];
 
-    console.log(`chunkSize: ${chunkSize}`);
-    console.log("streaming function dimensions:", size);
+      try {
+        for (let i = 0; i < maxChunks; i++) {
+          const zStart = i * chunkSize;
+          const zEnd = Math.min((i + 1) * chunkSize, depth);
+          const chunkDepth = zEnd - zStart;
 
-    const processedData = new Int16Array(data.length);
+          const chunkData = new Int16Array(width * height * chunkDepth);
 
-    // Calculate the number of chunks along each dimension
-    const chunks = size.map((dim) => Math.ceil(dim / chunkSize));
-
-    // Define processing for a single chunk
-    const processChunk = (xStart, xEnd, yStart, yEnd, zStart, zEnd) => {
-      for (let zi = zStart; zi < zEnd; zi++) {
-        for (let yi = yStart; yi < yEnd; yi++) {
-          for (let xi = xStart; xi < xEnd; xi++) {
-            const index = zi * size[1] * size[0] + yi * size[0] + xi;
-            processedData[index] = data[index] * 1; // Apply a simple scaling factor
+          for (let z = zStart; z < zEnd; z++) {
+            for (let y = 0; y < height; y++) {
+              for (let x = 0; x < width; x++) {
+                const index = z * width * height + y * width + x;
+                const chunkIndex =
+                  (z - zStart) * width * height + y * width + x;
+                chunkData[chunkIndex] = data[index];
+              }
+            }
           }
+
+          chunks.push({
+            ...itkImage,
+            size: [width, height, chunkDepth],
+            data: chunkData,
+          });
         }
+
+        // Reverse the order of chunks to combine from bottom to top
+        chunks.reverse();
+
+        resolve(chunks);
+      } catch (error) {
+        reject(error);
       }
-      console.log("processedData dimensions:", processedData.size);
-    };
-
-    // Process each chunk
-    for (let z = 0; z < chunks[2]; z++) {
-      for (let y = 0; y < chunks[1]; y++) {
-        for (let x = 0; x < chunks[0]; x++) {
-          const xStart = x * chunkSize;
-          const xEnd = Math.min(xStart + chunkSize, size[0]);
-          const yStart = y * chunkSize;
-          const yEnd = Math.min(yStart + chunkSize, size[1]);
-          const zStart = z * chunkSize;
-          const zEnd = Math.min(zStart + chunkSize, size[2]);
-
-          processChunk(xStart, xEnd, yStart, yEnd, zStart, zEnd);
-        }
-      }
-    }
-
-    // Return a new itkImage object with the processed data
-    return {
-      ...itkImage,
-      data: processedData,
-    };
-  }
-
-  //////////////////
-  function linearInterpolate(c0, c1, alpha) {
-    return c0 * (1 - alpha) + c1 * alpha;
+    });
   }
 
   function downsampleImage(itkImage, targetMaxDimension) {
     const { size, spacing, data } = itkImage;
-    console.log("Original size for downsampling:", size); // Print original size before downsampling
+    const maxFactor = Math.max(...size.map((dim) => dim / targetMaxDimension));
+    if (maxFactor <= 1) return itkImage;
 
-    // Calculate downsample factors for each dimension
-    const downsampleFactors = size.map((dim) => dim / targetMaxDimension);
-
-    // Find the maximum downsample factor to keep the aspect ratio
-    const maxFactor = Math.max(...downsampleFactors);
-
-    // Early exit if no downsampling is needed
-    if (maxFactor <= 1) {
-      return itkImage;
-    }
-
-    // Calculate new size and spacing
     const newSize = size.map((dim) => Math.ceil(dim / maxFactor));
-    const newSpacing = spacing.map((s, i) => s * maxFactor);
-    console.log("New size after downsampling:", newSize); // Print new size after downsampling
+    const newSpacing = spacing.map((s) => s * maxFactor);
+    const newPixelData = new Int16Array(newSize.reduce((a, b) => a * b));
 
-    // Allocate a new buffer for the downsampled data
-    const numberOfPixels = newSize.reduce((a, b) => a * b, 1);
-    const newPixelData = new Int16Array(numberOfPixels);
-
-    // Downsample each dimension
     for (let z = 0; z < newSize[2]; z++) {
       for (let y = 0; y < newSize[1]; y++) {
         for (let x = 0; x < newSize[0]; x++) {
-          // Find the corresponding position in the original data
           const originalX = x * maxFactor;
           const originalY = y * maxFactor;
           const originalZ = z * maxFactor;
 
-          // Compute indices for linear interpolation
           const x0 = Math.floor(originalX);
           const x1 = Math.min(size[0] - 1, x0 + 1);
           const y0 = Math.floor(originalY);
@@ -1082,12 +1421,10 @@ function vol_process(vol_arrFileList, vol_color_val) {
           const z0 = Math.floor(originalZ);
           const z1 = Math.min(size[2] - 1, z0 + 1);
 
-          // Calculate the weights for the interpolation
           const alphaX = originalX - x0;
           const alphaY = originalY - y0;
           const alphaZ = originalZ - z0;
 
-          // Perform linear interpolation
           const v000 = data[z0 * size[1] * size[0] + y0 * size[0] + x0];
           const v001 = data[z0 * size[1] * size[0] + y0 * size[0] + x1];
           const v010 = data[z0 * size[1] * size[0] + y1 * size[0] + x0];
@@ -1097,26 +1434,21 @@ function vol_process(vol_arrFileList, vol_color_val) {
           const v110 = data[z1 * size[1] * size[0] + y1 * size[0] + x0];
           const v111 = data[z1 * size[1] * size[0] + y1 * size[0] + x1];
 
-          // Interpolate along x
           const v00 = linearInterpolate(v000, v001, alphaX);
           const v01 = linearInterpolate(v010, v011, alphaX);
           const v10 = linearInterpolate(v100, v101, alphaX);
           const v11 = linearInterpolate(v110, v111, alphaX);
 
-          // Interpolate along y
           const v0 = linearInterpolate(v00, v01, alphaY);
           const v1 = linearInterpolate(v10, v11, alphaY);
 
-          // Interpolate along z
           const v = linearInterpolate(v0, v1, alphaZ);
 
-          // Assign to the new data
           newPixelData[z * newSize[1] * newSize[0] + y * newSize[0] + x] = v;
         }
       }
     }
 
-    // Create and return the new itkImage object
     return {
       ...itkImage,
       size: newSize,
@@ -1125,183 +1457,68 @@ function vol_process(vol_arrFileList, vol_color_val) {
     };
   }
 
-  //implementation of the volumeCleaning function
-  /*
-  function volumeCleaning(itkImage) {
-    const { size, data } = itkImage;
+  function linearInterpolate(c0, c1, alpha) {
+    return c0 * (1 - alpha) + c1 * alpha;
+  }
 
-    // Thresholding to identify non-zero voxels
-    const threshold = -80; // Adjust threshold if needed
-    const binaryMask = new Int16Array(size[0] * size[1] * size[2]);
-    for (let i = 0; i < data.length; i++) {
-      if (data[i] > threshold) {
-        binaryMask[i] = 1;
-      }
+  function readDicomInChunks(files, chunkSize, processImageData, handleError) {
+    let totalFiles = files.length;
+    let chunks = [];
+
+    for (let i = 0; i < totalFiles; i += chunkSize) {
+      chunks.push(Array.from(files).slice(i, i + chunkSize));
     }
 
-    // Run connected component labeling to find the largest connected component
-    const { labels } = connectedComponentLabeling(binaryMask, size);
+    (function processNextChunk() {
+      if (chunks.length === 0) return;
 
-    // Find the label of the largest connected component
-    const labelCounts = new Map();
-    let maxLabel = 0;
-    for (const label of labels) {
-      if (label !== 0) {
-        const count = labelCounts.get(label) || 0;
-        labelCounts.set(label, count + 1);
-        if (count + 1 > (labelCounts.get(maxLabel) || 0)) {
-          maxLabel = label;
-        }
-      }
-    }
+      let currentChunk = chunks.shift();
+      itk
+        .readImageDICOMFileSeries(currentChunk)
+        .then((result) => {
+          processImageData(result);
+          processNextChunk();
+        })
+        .catch(handleError);
+    })();
+  }
 
-    // Find bounding box of the largest connected component
-    let minX = size[0];
-    let maxX = 0;
-    let minY = size[1];
-    let maxY = 0;
-    let minZ = size[2];
-    let maxZ = 0;
-    for (let z = 0; z < size[2]; z++) {
-      for (let y = 0; y < size[1]; y++) {
-        for (let x = 0; x < size[0]; x++) {
-          const idx = x + y * size[0] + z * size[0] * size[1];
-          if (labels[idx] === maxLabel) {
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
-            minZ = Math.min(minZ, z);
-            maxZ = Math.max(maxZ, z);
-          }
-        }
-      }
-    }
+  function readNiftiInChunks(file, chunkSize, processImageData, handleError) {
+    // Assuming NIfTI file is single, this needs to be handled differently if multi-file
+    itk.readImageFile(null, file[0]).then(processImageData).catch(handleError);
+  }
 
-    // Add padding to the bounding box (optional)
-    const padding = 0; // Adjust padding size if needed
-    minX = Math.max(0, minX - padding);
-    maxX = Math.min(size[0] - 1, maxX + padding);
-    minY = Math.max(0, minY - padding);
-    maxY = Math.min(size[1] - 1, maxY + padding);
-    minZ = Math.max(0, minZ - padding);
-    maxZ = Math.min(size[2] - 1, maxZ + padding);
+  function combineChunks(itkImages) {
+    if (itkImages.length === 0) return null;
 
-    // Crop the image based on the bounding box
-    const newSize = [maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1];
-    const croppedData = new Int16Array(newSize[0] * newSize[1] * newSize[2]);
-    for (let z = minZ; z <= maxZ; z++) {
-      for (let y = minY; y <= maxY; y++) {
-        for (let x = minX; x <= maxX; x++) {
-          const srcIdx = x + y * size[0] + z * size[0] * size[1];
-          const dstIdx =
-            x -
-            minX +
-            (y - minY) * newSize[0] +
-            (z - minZ) * newSize[0] * newSize[1];
-          croppedData[dstIdx] = data[srcIdx];
-        }
-      }
-    }
+    // Assume all images have the same width and height
+    const { size, spacing, data: firstData } = itkImages[0];
+    const [width, height] = size;
+    let totalDepth = 0;
 
-    // Update image metadata
-    const newOrigin = [
-      itkImage.origin[0] + minX * itkImage.spacing[0],
-      itkImage.origin[1] + minY * itkImage.spacing[1],
-      itkImage.origin[2] + minZ * itkImage.spacing[2],
-    ];
+    itkImages.forEach((image) => {
+      totalDepth += image.size[2];
+    });
+
+    const combinedData = new Int16Array(width * height * totalDepth);
+    let offset = 0;
+
+    // Reverse the order of itkImages to combine from bottom to top
+    itkImages.reverse().forEach((image) => {
+      const { data } = image;
+      combinedData.set(data, offset);
+      offset += data.length;
+    });
+
+    // Check dimensions of the combined data
+    combinedDimensions = [width, height, totalDepth];
+    console.log("Dimensions of the combined data:", combinedDimensions);
 
     return {
-      ...itkImage,
-      size: newSize,
-      origin: newOrigin,
-      data: croppedData,
+      ...itkImages[0],
+      size: [width, height, totalDepth],
+      data: combinedData,
     };
-
-    function connectedComponentLabeling(binaryMask, size) {
-      const labels = new Int16Array(binaryMask.length); // Array to store labels
-      const labelMap = new Map(); // Map to store label equivalences
-      let currentLabel = 1; // Initial label
-
-      // Define neighbors offsets for 3D case
-      const neighborOffsets = [
-        -1, 0, 0, 0, -1, 0, 0, 0, -1, 1, 0, 0, 0, 1, 0, 0, 0, 1,
-      ];
-
-      // Function to get the label of a neighboring voxel
-      const getNeighborLabel = (x, y, z, neighborIndex) => {
-        const nx = x + neighborOffsets[neighborIndex * 3];
-        const ny = y + neighborOffsets[neighborIndex * 3 + 1];
-        const nz = z + neighborOffsets[neighborIndex * 3 + 2];
-        if (
-          nx >= 0 &&
-          nx < size[0] &&
-          ny >= 0 &&
-          ny < size[1] &&
-          nz >= 0 &&
-          nz < size[2]
-        ) {
-          return labels[nx + ny * size[0] + nz * size[0] * size[1]];
-        }
-        return 0;
-      };
-
-      // Function to find the root label of an equivalence class
-      const findRootLabel = (label) => {
-        while (labelMap.has(label)) {
-          label = labelMap.get(label);
-        }
-        return label;
-      };
-
-      // First pass: labeling
-      for (let z = 0; z < size[2]; z++) {
-        for (let y = 0; y < size[1]; y++) {
-          for (let x = 0; x < size[0]; x++) {
-            const idx = x + y * size[0] + z * size[0] * size[1];
-            if (binaryMask[idx] === 1) {
-              // Get neighboring labels
-              const neighborLabels = [];
-              for (let neighborIndex = 0; neighborIndex < 6; neighborIndex++) {
-                const neighborLabel = getNeighborLabel(x, y, z, neighborIndex);
-                if (neighborLabel !== 0) {
-                  neighborLabels.push(neighborLabel);
-                }
-              }
-              if (neighborLabels.length === 0) {
-                labels[idx] = currentLabel;
-                currentLabel++;
-              } else {
-                // Find the minimum neighbor label
-                const minNeighborLabel = Math.min(...neighborLabels);
-                labels[idx] = minNeighborLabel;
-                // Update label equivalences
-                for (const neighborLabel of neighborLabels) {
-                  if (neighborLabel !== minNeighborLabel) {
-                    labelMap.set(neighborLabel, minNeighborLabel);
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Second pass: relabeling
-      for (let i = 0; i < labels.length; i++) {
-        if (labels[i] !== 0) {
-          labels[i] = findRootLabel(labels[i]);
-        }
-      }
-
-      // Count the number of unique labels
-      const uniqueLabels = new Set(labels);
-      uniqueLabels.delete(0); // Remove background label
-      const numLabels = uniqueLabels.size;
-
-      return { labels, numLabels };
-    }
   }
-  */
 }
 ///////////////////////////
