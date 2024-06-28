@@ -23,6 +23,8 @@ let volImgDimensions = []; // Global variable to store the dimension of downsamp
 ////////////////////////////////////////////////////////////////////////////////
 let chunkSize;
 let maxUploadMemoryMB;
+//
+let lookupTable, piecewiseFunction;
 
 document.addEventListener("DOMContentLoaded", function () {
   const canvas = document.createElement("canvas");
@@ -528,15 +530,13 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
     widget1.setDataArray(histogram);
 
     // Step 4: Connect the widget with the volume rendering
-    const piecewiseFunction =
-      vtk.Common.DataModel.vtkPiecewiseFunction.newInstance();
+    piecewiseFunction = vtk.Common.DataModel.vtkPiecewiseFunction.newInstance();
 
     // Implementing a more professional lookupTable
-    const lookupTable =
-      vtk.Rendering.Core.vtkColorTransferFunction.newInstance();
+    lookupTable = vtk.Rendering.Core.vtkColorTransferFunction.newInstance();
 
-    // Professional color mapping
-    lookupTable.addRGBPoint(-1000, 0.0, 0.0, 0.0); // Air: black
+    // Color mapping
+    lookupTable.addRGBPoint(-1000, 0.8, 0.8, 0.8); // Air: light grey
     lookupTable.addRGBPoint(-600, 0.3, 0.3, 0.3); // Lung: dark grey
     lookupTable.addRGBPoint(-400, 0.62, 0.36, 0.18); // Fat: brown
     lookupTable.addRGBPoint(0, 0.88, 0.6, 0.29); // Soft Tissue: soft orange
@@ -554,7 +554,7 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
     piecewiseFunction.addPoint(0, 0.2); // Soft Tissue: slightly opaque
     piecewiseFunction.addPoint(50, 0.3); // Skin: more opaque
     piecewiseFunction.addPoint(150, 0.4); // Muscle: more opaque
-    piecewiseFunction.addPoint(300, 0.7); // Peripheral Arteries with Contrast: highlight
+    piecewiseFunction.addPoint(300, 0.9); // Peripheral Arteries with Contrast: highlight
     piecewiseFunction.addPoint(500, 0.5); // Fat: more opaque
     piecewiseFunction.addPoint(700, 0.85); // Bone: less transparent
     piecewiseFunction.addPoint(2000, 1.0); // Dense Bone: opaque
@@ -652,6 +652,7 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
     renderer.resetCamera();
     renderWindow.render();
   });
+  /*
   ////
   // Performance Metrics
   // Performance Metrics
@@ -880,6 +881,7 @@ function webGLVolumeRendering(volume_imageData_input, volume_color_val_input) {
   }
 
   logGPUInfo();
+  */
 }
 
 // function to convert HEX to RGBA string
@@ -932,6 +934,7 @@ function trigger_changes_volume(
     renderWindow.render();
     console.log("Updated Scalar Opacity to:", scalarOpacityValue);
   });
+
   console.log("checking message3...");
 
   /// Apply cropped and rerender this part
