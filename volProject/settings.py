@@ -25,9 +25,9 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'volApp/templates')
 SECRET_KEY = 'django-insecure-57_r628sfp@(0zpkhn%*0ghbuxi$jo_-p^m9ingj_9bz+p^s&d'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['mohammedaboarab.pythonanywhere.com']
 
 
 # Application definition
@@ -124,6 +124,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 
 # STATICFILES_DIRS = [
 #     os.path.join(BASE_DIR, 'volApp/static'),
