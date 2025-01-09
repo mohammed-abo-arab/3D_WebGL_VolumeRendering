@@ -17,19 +17,19 @@ To set up and run the project locally, follow these steps:
 git clone https://github.com/mohammed-abo-arab/3D_WebGL_VolumeRendering.git
 cd 3D_WebGL_VolumeRendering
 
-2. Install Dependencies
+### **2. Install Dependencies**
 Ensure Python 3.7+ is installed, then install the required dependencies:
 pip install -r requirements.txt
 
-3. Run the Server
+### **3. Run the Server**
 Start the Django development server:
 python manage.py runserver
 
-4. Open in Browser
+### **4. Open in Browser**
 Once the server is running, access the web application at:
 http://127.0.0.1:8000/
 
-Key Features
+### **Key Features**
 ✅ WebGL-Powered Interactive 3D Visualization
 ✅ Level of Detail (LOD) Optimization for Efficient Rendering
 ✅ Progressive Data Streaming for Large CT Images
@@ -37,12 +37,13 @@ Key Features
 ✅ Cross-Platform Browser-Based Visualization
 ✅ GPU-Efficient High-Performance Rendering
 
-System Requirements
+### **System Requirements**
 Python ≥ 3.7
 Django ≥ 3.x
 WebGL-Compatible Browser (Chrome, Firefox, Edge)
 NVIDIA/AMD GPU Recommended for Optimal Performance
-Usage
+
+### **Usage**
 Upload CT datasets in DICOM/NIfTI format.
 Navigate through the 3D volume using the interactive WebGL viewer.
 Adjust LOD settings to optimize visualization performance.
