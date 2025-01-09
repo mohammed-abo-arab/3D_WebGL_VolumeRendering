@@ -15,18 +15,22 @@ To set up and run the project locally, follow these steps:
 ### **1. Clone the Repository**
 
 git clone https://github.com/mohammed-abo-arab/3D_WebGL_VolumeRendering.git
+
 cd 3D_WebGL_VolumeRendering
 
 ### **2. Install Dependencies**
 Ensure Python 3.7+ is installed, then install the required dependencies:
+
 pip install -r requirements.txt
 
 ### **3. Run the Server**
 Start the Django development server:
+
 python manage.py runserver
 
 ### **4. Open in Browser**
 Once the server is running, access the web application at:
+
 http://127.0.0.1:8000/
 
 ### **Key Features**
