@@ -30,11 +30,17 @@ Once the server is running, access the web application at:
 http://127.0.0.1:8000/
 
 ### **Key Features**
+
 ✅ WebGL-Powered Interactive 3D Visualization
+
 ✅ Level of Detail (LOD) Optimization for Efficient Rendering
+
 ✅ Progressive Data Streaming for Large CT Images
+
 ✅ Dynamic Region of Interest (ROI) Rerendering
+
 ✅ Cross-Platform Browser-Based Visualization
+
 ✅ GPU-Efficient High-Performance Rendering
 
 ### **System Requirements**
