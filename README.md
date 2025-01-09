@@ -44,13 +44,21 @@ http://127.0.0.1:8000/
 ✅ GPU-Efficient High-Performance Rendering
 
 ### **System Requirements**
+
 Python ≥ 3.7
+
 Django ≥ 3.x
+
 WebGL-Compatible Browser (Chrome, Firefox, Edge)
+
 NVIDIA/AMD GPU Recommended for Optimal Performance
 
 ### **Usage**
+
 Upload CT datasets in DICOM/NIfTI format.
+
 Navigate through the 3D volume using the interactive WebGL viewer.
+
 Adjust LOD settings to optimize visualization performance.
+
 Focus on regions of interest (ROI) for enhanced diagnostic precision.
