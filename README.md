@@ -13,7 +13,7 @@ This tool is optimized for **interactive 3D visualization of computed tomography
 To set up and run the project locally, follow these steps:
 
 ### **1. Clone the Repository**
-```bash
+
 git clone https://github.com/mohammed-abo-arab/3D_WebGL_VolumeRendering.git
 cd 3D_WebGL_VolumeRendering
 
