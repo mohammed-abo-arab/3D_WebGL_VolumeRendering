@@ -33,6 +33,15 @@ Once the server is running, access the web application at:
 
 http://127.0.0.1:8000/
 
+Code Structure
+The core implementation of the 3D WebGL volume rendering is handled in the following main file:
+
+### **📌 Main WebGL Code:**
+
+3D_WebGL_VolumeRendering/volApp/static/js/final3dWebGL.js
+
+This file contains the GPU-accelerated rendering pipeline, LOD optimization, and progressive streaming logic.
+
 ### **Key Features**
 
 ✅ WebGL-Powered Interactive 3D Visualization
